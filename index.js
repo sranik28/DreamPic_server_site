@@ -3,7 +3,7 @@ const cors = require('cors');
 require('dotenv').config();
 
 
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 9999;
 const app = express();
 
 app.use(cors());
@@ -33,6 +33,12 @@ async function run() {
 
         app.get('/classes', async (req, res) => {
             const classes = await classesCollection.find().sort({
+                student_enroll: -1
+            }).toArray();
+            res.send(classes);
+        })
+        app.get('/top-classes', async (req, res) => {
+            const classes = await classesCollection.find().limit(6).sort({
                 student_enroll: -1
             }).toArray();
             res.send(classes);
