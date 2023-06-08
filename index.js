@@ -10,9 +10,6 @@ app.use(cors());
 app.use(express.json());
 
 
-// dreamPic
-// Ou1WjsjqomD2kPEJ
-console.log(process.env.DB_USER)
 
 const { MongoClient, ServerApiVersion } = require('mongodb');
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster1.ngcynwn.mongodb.net/?retryWrites=true&w=majority`;
@@ -31,8 +28,15 @@ async function run() {
         // Connect the client to the server	(optional starting in v4.7)
         await client.connect();
 
+        // collections to mongodb 
+        const classesCollection = client.db("dreamPic").collection("classes");
 
-
+        app.get('/classes', async (req, res) => {
+            const classes = await classesCollection.find().sort({
+                student_enroll: -1
+            }).toArray();
+            res.send(classes);
+        })
 
 
 
