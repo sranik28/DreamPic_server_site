@@ -47,11 +47,12 @@ async function run() {
         // collections to mongodb 
         const classesCollection = client.db("dreamPic").collection("classes");
         const instructorCollection = client.db("dreamPic").collection("instructor");
-        const usersCollection= client.db("dreamPic").collection("users");
+        const usersCollection = client.db("dreamPic").collection("users");
+        const seletedCollection = client.db("dreamPic").collection("seleted_classes");
 
         const verityInstructor = async (req, res, next) => {
             const email = req.decoded.email
-            const user = await users_collection.findOne({ email: email })
+            const user = await usersCollection.findOne({ email: email })
             if (user?.role !== "instructor") {
                 return res.status(401).send({ error: true, message: "unauthorized access" })
             }
@@ -64,35 +65,41 @@ async function run() {
             const token = jwt.sign({
                 email: email,
             }, process.env.SECKRET_KEY, { expiresIn: '10h' })
-            res.send({token}) 
+            res.send({ token })
         })
 
         app.get("/authorization", async (req, res) => {
-            const email = req.query.email 
-            const user = await usersCollection.findOne({email: email})
-            if(user) {
-              res.send({role: user?.role}) 
+            const email = req.query.email
+            const user = await usersCollection.findOne({ email: email })
+            if (user) {
+                res.send({ role: user?.role })
             }
-          })
+        })
 
-          app.put("/add-user", async (req, res) => {
+        app.put("/add-user", async (req, res) => {
             const userData = req.body
             const email = req.query.email
             const filter = {
-              email: email
+                email: email
             }
             const user = {
-              $set: {
-                name: userData?.name,
-                email: userData?.email,
-                photo_url: userData?.photo_url,
-              }
+                $set: {
+                    name: userData?.name,
+                    email: userData?.email,
+                    photo_url: userData?.photo_url,
+                }
             }
             const options = { upsert: true };
-            const result = await  usersCollection.updateOne(filter, user, options)
+            const result = await usersCollection.updateOne(filter, user, options)
             res.send(result)
-      
-          })
+
+        })
+
+        // Instructor api
+        app.get('/instructor', async (req, res) => {
+            const instructor = await instructorCollection.find().toArray();
+            res.send(instructor);
+        })
 
         // classes api
         app.get('/classes', async (req, res) => {
@@ -109,16 +116,15 @@ async function run() {
             res.send(classes);
         })
 
-        app.get("/my-classes", verifyToken, verityInstructor, async(req, res) => {
+        app.get("/my-classes", verifyToken, verityInstructor, async (req, res) => {
             const email = req?.query?.email
-            const result = await classesCollection.find({instructor_email: email}).toArray()
+            const result = await classesCollection.find({ instructor_email: email }).toArray()
             res.send(result)
         })
 
-        // Instructor api
-        app.get('/instructor', async (req, res) => {
-            const instructor = await instructorCollection.find().toArray();
-            res.send(instructor);
+        app.get("/users", verifyToken, verityAdmin, async (req, res) => {
+            const result = await usersCollection.find().toArray()
+            res.send(result)
         })
 
 
@@ -150,9 +156,15 @@ async function run() {
                 email: singleClass.email
             }
 
-            const result = await seleted_collection.insertOne(addToClass)
+            const result = await seletedCollection.insertOne(addToClass)
             res.send(result)
         })
+
+        app.get("/selected-classes", verifyToken, async(req, res) => {
+            const email = req?.query?.email
+              const result = await seleted_collection.find({email: email}).toArray()
+              res.send(result)
+          })
 
 
         // Send a ping to confirm a successful connection
