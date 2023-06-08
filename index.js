@@ -1,6 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
+const jwt = require("jsonwebtoken");
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
 
 const port = process.env.PORT || 9999;
@@ -27,7 +29,7 @@ const verifyToken = (req, res, next) => {
 }
 
 
-const { MongoClient, ServerApiVersion } = require('mongodb');
+
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster1.ngcynwn.mongodb.net/?retryWrites=true&w=majority`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -51,6 +53,17 @@ async function run() {
         const seletedCollection = client.db("dreamPic").collection("seleted_classes");
         const paymentsCollection = client.db("dreamPic").collection("payments");
         const enrolledCollection = client.db("dreamPic").collection("enrolled_classes");
+
+
+        const verityAdmin = async (req, res, next) => {
+            const email = req.decoded.email
+            const user = await users_collection.findOne({email: email})
+            if(user?.role !== "admin") {
+                return res.status(401).send({error: true, message: "unauthorized access"})
+            }
+                next()
+            
+          }
 
         const verityInstructor = async (req, res, next) => {
             const email = req.decoded.email
@@ -168,7 +181,11 @@ async function run() {
             res.send(result)
         })
 
-        
+        app.get("/enrolled-classes", verifyToken, async (req, res) => {
+            const email = req?.query?.email
+            const result = await enrolledCollection.find({ email: email }).toArray()
+            res.send(result)
+        })
 
         app.delete("/delete-selected-class/:id", verifyToken, async (req, res) => {
             const id = req.params.id
