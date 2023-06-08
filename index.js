@@ -30,7 +30,9 @@ async function run() {
 
         // collections to mongodb 
         const classesCollection = client.db("dreamPic").collection("classes");
+        const instructorCollection = client.db("dreamPic").collection("instructor");
 
+        // classes api
         app.get('/classes', async (req, res) => {
             const classes = await classesCollection.find().sort({
                 student_enroll: -1
@@ -44,7 +46,11 @@ async function run() {
             res.send(classes);
         })
 
-
+        // Instructor
+        app.get('/instructor', async (req, res) => {
+            const instructor = await instructorCollection.find().toArray();
+            res.send(instructor);
+        })
 
 
         // Send a ping to confirm a successful connection
