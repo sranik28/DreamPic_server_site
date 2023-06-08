@@ -160,10 +160,22 @@ async function run() {
             res.send(result)
         })
 
-        app.get("/selected-classes", verifyToken, async(req, res) => {
+        app.get("/selected-classes", verifyToken, async (req, res) => {
             const email = req?.query?.email
-              const result = await seleted_collection.find({email: email}).toArray()
-              res.send(result)
+            const result = await seletedCollection.find({ email: email }).toArray()
+            res.send(result)
+        })
+
+        app.get("/enrolled-classes", verifyToken, async (req, res) => {
+            const email = req?.query?.email
+            const result = await enrolled_collection.find({ email: email }).toArray()
+            res.send(result)
+        })
+
+        app.delete("/delete-selected-class/:id", verifyToken, async (req, res) => {
+            const id = req.params.id 
+            const result = await seleted_collection.deleteOne({_id: new ObjectId(id)})
+            res.send(result)
           })
 
 
