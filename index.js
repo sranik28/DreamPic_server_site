@@ -58,6 +58,14 @@ async function run() {
 
         }
 
+        app.post("/jwt", (req, res) => {
+            const email = req.query.email
+            const token = jwt.sign({
+                email: email,
+            }, process.env.SECKRET_KEY, { expiresIn: '10h' })
+            res.send({token}) 
+        })
+
         // classes api
         app.get('/classes', async (req, res) => {
             const classes = await classesCollection.find().sort({
