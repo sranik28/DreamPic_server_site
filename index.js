@@ -49,6 +49,8 @@ async function run() {
         const instructorCollection = client.db("dreamPic").collection("instructor");
         const usersCollection = client.db("dreamPic").collection("users");
         const seletedCollection = client.db("dreamPic").collection("seleted_classes");
+        const paymentsCollection = client.db("dreamPic").collection("payments");
+        const enrolledCollection = client.db("dreamPic").collection("enrolled_classes");
 
         const verityInstructor = async (req, res, next) => {
             const email = req.decoded.email
@@ -166,17 +168,45 @@ async function run() {
             res.send(result)
         })
 
-        app.get("/enrolled-classes", verifyToken, async (req, res) => {
-            const email = req?.query?.email
-            const result = await enrolled_collection.find({ email: email }).toArray()
+        
+
+        app.delete("/delete-selected-class/:id", verifyToken, async (req, res) => {
+            const id = req.params.id
+            const result = await seletedCollection.deleteOne({ _id: new ObjectId(id) })
             res.send(result)
         })
 
-        app.delete("/delete-selected-class/:id", verifyToken, async (req, res) => {
-            const id = req.params.id 
-            const result = await seleted_collection.deleteOne({_id: new ObjectId(id)})
+        // payments 
+        app.post('/create-payment-intent', verifyToken, async (req, res) => {
+            const { price } = req.body;
+            const amount = parseInt(price * 100);
+            const paymentIntent = await stripe.paymentIntents.create({
+                amount: amount,
+                currency: 'usd',
+                payment_method_types: ['card']
+            });
+
+            res.send({
+                clientSecret: paymentIntent.client_secret
+            })
+        })
+
+        app.post('/payments', verifyToken, async (req, res) => {
+            const payment = req.body;
+            const insertResult = await paymentsCollection.insertOne(payment);
+            const query = { _id: { $in: payment.selectedClasses.map(id => new ObjectId(id)) } }
+            const deleteResult = await seletedCollection.deleteMany(query)
+            const classesQuery = { _id: { $in: payment.classes.map(classId => new ObjectId(classId)) } }
+            const paidClasses = await classesCollection.find(classesQuery).toArray()
+            await enrolledCollection.insertMany(paidClasses)
+            res.send({ insertResult, deleteResult });
+        })
+
+        app.get("/payment-history", verifyToken, async (req, res) => {
+            const email = req?.query?.email
+            const result = await paymentsCollection.find({ email: email }).toArray()
             res.send(result)
-          })
+        })
 
 
         // Send a ping to confirm a successful connection
