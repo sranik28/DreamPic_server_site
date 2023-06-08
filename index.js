@@ -101,11 +101,18 @@ async function run() {
             }).toArray();
             res.send(classes);
         })
+
         app.get('/top-classes', async (req, res) => {
             const classes = await classesCollection.find().limit(6).sort({
                 student_enroll: -1
             }).toArray();
             res.send(classes);
+        })
+
+        app.get("/my-classes", verifyToken, verityInstructor, async(req, res) => {
+            const email = req?.query?.email
+            const result = await classesCollection.find({instructor_email: email}).toArray()
+            res.send(result)
         })
 
         // Instructor api
