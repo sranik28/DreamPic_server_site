@@ -47,6 +47,7 @@ async function run() {
         // collections to mongodb 
         const classesCollection = client.db("dreamPic").collection("classes");
         const instructorCollection = client.db("dreamPic").collection("instructor");
+        const usersCollection= client.db("dreamPic").collection("users");
 
         const verityInstructor = async (req, res, next) => {
             const email = req.decoded.email
@@ -68,10 +69,29 @@ async function run() {
 
         app.get("/authorization", async (req, res) => {
             const email = req.query.email 
-            const user = await users_collection.findOne({email: email})
+            const user = await usersCollection.findOne({email: email})
             if(user) {
               res.send({role: user?.role}) 
             }
+          })
+
+          app.put("/add-user", async (req, res) => {
+            const userData = req.body
+            const email = req.query.email
+            const filter = {
+              email: email
+            }
+            const user = {
+              $set: {
+                name: userData?.name,
+                email: userData?.email,
+                photo_url: userData?.photo_url,
+              }
+            }
+            const options = { upsert: true };
+            const result = await  usersCollection.updateOne(filter, user, options)
+            res.send(result)
+      
           })
 
         // classes api
