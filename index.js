@@ -1,16 +1,15 @@
-const express = require('express');
-const cors = require('cors');
-require('dotenv').config();
-const jwt = require("jsonwebtoken");
+require("dotenv").config()
+const express = require("express")
+const port = process.env.PORT || 8888
+const app = express()
+const jwt = require("jsonwebtoken")
+const cors = require("cors")
+const stripe = require("stripe")(process.env.PAYMENT_SECRET_KEY)
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
 
-const port = process.env.PORT || 9999;
-const app = express();
-
-app.use(cors());
-app.use(express.json());
-
+app.use(cors())
+app.use(express.json())
 // verify jwt token 
 const verifyToken = (req, res, next) => {
     const authorization = req.headers.authorization
@@ -29,10 +28,9 @@ const verifyToken = (req, res, next) => {
 }
 
 
-
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster1.ngcynwn.mongodb.net/?retryWrites=true&w=majority`;
 
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
+
 const client = new MongoClient(uri, {
     serverApi: {
         version: ServerApiVersion.v1,
@@ -43,10 +41,8 @@ const client = new MongoClient(uri, {
 
 async function run() {
     try {
-        // Connect the client to the server	(optional starting in v4.7)
-        await client.connect();
 
-        // collections to mongodb 
+        //  client.connect();
         const classesCollection = client.db("dreamPic").collection("classes");
         const instructorCollection = client.db("dreamPic").collection("instructor");
         const usersCollection = client.db("dreamPic").collection("users");
@@ -55,15 +51,16 @@ async function run() {
         const enrolledCollection = client.db("dreamPic").collection("enrolled_classes");
 
 
+        // verify admin 
         const verityAdmin = async (req, res, next) => {
             const email = req.decoded.email
-            const user = await users_collection.findOne({email: email})
-            if(user?.role !== "admin") {
-                return res.status(401).send({error: true, message: "unauthorized access"})
+            const user = await usersCollection.findOne({ email: email })
+            if (user?.role !== "admin") {
+                return res.status(401).send({ error: true, message: "unauthorized access" })
             }
-                next()
-            
-          }
+            next()
+
+        }
 
         const verityInstructor = async (req, res, next) => {
             const email = req.decoded.email
@@ -79,29 +76,35 @@ async function run() {
             const email = req.query.email
             const token = jwt.sign({
                 email: email,
-            }, process.env.SECKRET_KEY, { expiresIn: '10h' })
+            }, process.env.SECKRET_KEY, { expiresIn: '20000h' })
             res.send({ token })
         })
 
+        // checking authorization 
         app.get("/authorization", async (req, res) => {
-            const email = req.query.email
+            const email = req?.query?.email
             const user = await usersCollection.findOne({ email: email })
             if (user) {
                 res.send({ role: user?.role })
             }
         })
 
+        // users requests
+
         app.put("/add-user", async (req, res) => {
             const userData = req.body
-            const email = req.query.email
+            const email = req?.query?.email
             const filter = {
                 email: email
             }
+
+            const savedUser = await usersCollection.findOne(filter)
             const user = {
                 $set: {
                     name: userData?.name,
                     email: userData?.email,
                     photo_url: userData?.photo_url,
+                    role: savedUser?.role || "student"
                 }
             }
             const options = { upsert: true };
@@ -110,39 +113,28 @@ async function run() {
 
         })
 
-        // Instructor api
-        app.get('/instructor', async (req, res) => {
-            const instructor = await instructorCollection.find().toArray();
-            res.send(instructor);
+        // instructors requests 
+        app.get("/instructors", async (req, res) => {
+            const instructors = await instructorCollection.find().toArray()
+            res.send(instructors)
         })
 
-        // classes api
-        app.get('/classes', async (req, res) => {
-            const classes = await classesCollection.find().sort({
-                student_enroll: -1
-            }).toArray();
-            res.send(classes);
+        app.get("/popular-instructors", async (req, res) => {
+            const instructors = await instructorCollection.find().limit(6).toArray()
+            res.send(instructors)
         })
-
-        app.get('/top-classes', async (req, res) => {
-            const classes = await classesCollection.find().limit(6).sort({
-                student_enroll: -1
-            }).toArray();
-            res.send(classes);
+        // classes requests 
+        app.get("/classes", async (req, res) => {
+            const classStatus = req.query.status
+            const filter = classStatus === "all" ? {} : { status: classStatus }
+            const classes = await classesCollection.find(filter).toArray()
+            res.send(classes)
         })
-
-        app.get("/my-classes", verifyToken, verityInstructor, async (req, res) => {
-            const email = req?.query?.email
-            const result = await classesCollection.find({ instructor_email: email }).toArray()
-            res.send(result)
+        app.get("/class/:id", async (req, res) => {
+            const id = req.params.id
+            const singleClass = await classesCollection.findOne({ _id: new ObjectId(id) })
+            res.send(singleClass)
         })
-
-        app.get("/users", verifyToken, verityAdmin, async (req, res) => {
-            const result = await usersCollection.find().toArray()
-            res.send(result)
-        })
-
-
         app.post("/add-class", verifyToken, verityInstructor, async (req, res) => {
             const data = req.body
             const newClass = {
@@ -152,9 +144,95 @@ async function run() {
                 instructor_email: data.instructor_email,
                 avilable_seats: parseFloat(data.avilable_seats),
                 price: parseFloat(data.price),
+                status: "pending",
+                enrolled: 0,
+                feedback: "",
             }
 
+
+            const instructor = await instructorCollection.findOne({ email: data.instructor_email })
+
+            if (!instructor) {
+                await instructorCollection.insertOne({
+                    name: data.instructor_name,
+                    image: data.instructor_photo,
+                    email: data.instructor_email
+                })
+
+            }
+
+
             const result = await classesCollection.insertOne(newClass)
+            res.send(result)
+        })
+
+        app.put("/update-class/:id", verifyToken, verityInstructor, async (req, res) => {
+            const id = req.params.id
+            const data = req.body
+            const updatedClass = {
+                $set: {
+                    class_name: data.class_name,
+                    avilable_seats: parseFloat(data.avilable_seats),
+                    price: parseFloat(data.price)
+                }
+            }
+            const result = await classesCollection.updateOne({ _id: new ObjectId(id) }, updatedClass)
+            res.send(result)
+        })
+
+
+        // popular classes 
+        app.get("/popular-classes", async (req, res) => {
+            const result = await classesCollection.find({ status: "approved" }, { sort: { enrolled: -1 } }).limit(6).toArray()
+            res.send(result)
+        })
+        // change status 
+        app.put("/change-class-status/:id", verifyToken, verityAdmin, async (req, res) => {
+            const status = req.body.status
+            const id = req.params.id
+            const filter = { _id: new ObjectId(id) }
+            const updatedStatus = {
+                $set: {
+                    status: status
+                },
+
+            }
+            const result = await classesCollection.updateOne(filter, updatedStatus)
+            res.send(result)
+        })
+
+        // update user role
+
+        app.put("/change-user-role/:id", verifyToken, verityAdmin, async (req, res) => {
+            const role = req.body.role
+            const id = req.params.id
+            const filter = { _id: new ObjectId(id) }
+            const updatedRole = {
+                $set: {
+                    role: role
+                }
+            }
+            const result = await usersCollection.updateOne(filter, updatedRole)
+            console.log(result)
+            res.send(result)
+        })
+
+        app.get("/my-classes", verifyToken, verityInstructor, async (req, res) => {
+            const email = req?.query?.email
+            const result = await classesCollection.find({ instructor_email: email }).toArray()
+            res.send(result)
+        })
+
+
+        // admin page req 
+        app.get("/users", verifyToken, verityAdmin, async (req, res) => {
+            const result = await usersCollection.find().toArray()
+            res.send(result)
+        })
+
+        app.delete("/delete-user/:id", verifyToken, async (req, res) => {
+            const id = req.params.id
+            const result = await usersCollection.deleteOne({ _id: new ObjectId(id) })
             res.send(result)
         })
 
@@ -175,6 +253,22 @@ async function run() {
             res.send(result)
         })
 
+
+        // feedback 
+        app.put("/send-feedback/:id", verifyToken, verityAdmin, async (req, res) => {
+            const feedback = req.body.feedback
+            const id = req.params.id
+            const filter = { _id: new ObjectId(id) }
+            const updatedFeedBack = {
+                $set: {
+                    feedback: feedback
+                },
+
+            }
+            const result = await classesCollection.updateOne(filter, updatedFeedBack)
+            res.send(result)
+        })
+
         app.get("/selected-classes", verifyToken, async (req, res) => {
             const email = req?.query?.email
             const result = await seletedCollection.find({ email: email }).toArray()
@@ -186,6 +280,7 @@ async function run() {
             const result = await enrolledCollection.find({ email: email }).toArray()
             res.send(result)
         })
+
 
         app.delete("/delete-selected-class/:id", verifyToken, async (req, res) => {
             const id = req.params.id
@@ -208,37 +303,63 @@ async function run() {
             })
         })
 
+
         app.post('/payments', verifyToken, async (req, res) => {
             const payment = req.body;
             const insertResult = await paymentsCollection.insertOne(payment);
             const query = { _id: { $in: payment.selectedClasses.map(id => new ObjectId(id)) } }
             const deleteResult = await seletedCollection.deleteMany(query)
             const classesQuery = { _id: { $in: payment.classes.map(classId => new ObjectId(classId)) } }
-            const paidClasses = await classesCollection.find(classesQuery).toArray()
-            await enrolledCollection.insertMany(paidClasses)
+            const option = {
+                projection: {
+                    _id: 0,
+                    class_image: 1,
+                    class_name: 1,
+                    instructor_name: 1,
+                    instructor_email: 1,
+                    price: 1
+                }
+            }
+            const paidClasses = await classesCollection.find(classesQuery, option).toArray()
+            const enrolled = paidClasses.map(paidClass => {
+                return {
+                    ...paidClass,
+                    email: payment.email
+                }
+            })
+            await enrolledCollection.insertMany(enrolled)
+
+            const updateValue = {
+                $inc: {
+                    avilable_seats: -1,
+                    enrolled: 1
+                }
+            }
+            await classesCollection.updateMany(classesQuery, updateValue)
+
             res.send({ insertResult, deleteResult });
         })
 
         app.get("/payment-history", verifyToken, async (req, res) => {
             const email = req?.query?.email
-            const result = await paymentsCollection.find({ email: email }).toArray()
+            const result = await paymentsCollection.find({ email: email }, { sort: { date: -1 } }).toArray()
             res.send(result)
         })
 
 
-        // Send a ping to confirm a successful connection
-        await client.db("admin").command({ ping: 1 });
-        console.log("Pinged your deployment. You successfully connected to MongoDB!");
-    } finally {
-        // Ensures that the client will close when you finish/error
-        // await client.close();
+
+
+    } catch (error) {
+        console.log(error)
     }
 }
 run().catch(console.dir);
 
 
-app.get('/', (req, res) => {
-    res.send('Hello World!');
-});
+
+app.get("/", (req, res) => {
+    res.send("camp is running")
+})
+
 
 app.listen(port)
