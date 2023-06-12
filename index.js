@@ -145,7 +145,7 @@ async function run() {
                 avilable_seats: parseFloat(data.avilable_seats),
                 price: parseFloat(data.price),
                 status: "pending",
-                enrolled: 0,
+                student_enroll: 0,
                 feedback: "",
             }
 
@@ -183,7 +183,7 @@ async function run() {
 
         // popular classes 
         app.get("/popular-classes", async (req, res) => {
-            const result = await classesCollection.find({ status: "approved" }, { sort: { enrolled: -1 } }).limit(6).toArray()
+            const result = await classesCollection.find({ status: "Approved" }, { sort: { student_enroll: -1 } }).limit(6).toArray()
             res.send(result)
         })
         // change status 
@@ -332,7 +332,7 @@ async function run() {
             const updateValue = {
                 $inc: {
                     avilable_seats: -1,
-                    enrolled: 1
+                    student_enroll:1
                 }
             }
             await classesCollection.updateMany(classesQuery, updateValue)
@@ -358,7 +358,7 @@ run().catch(console.dir);
 
 
 app.get("/", (req, res) => {
-    res.send("camp is running")
+    res.send("DreamPic is running")
 })
 
 
